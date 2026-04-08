@@ -1,0 +1,2 @@
+The file dataset.xlsx is a 120 row excerpt of the iCOMP study descried in the vignette
+and used im the AIMOS 2025 workshop at the University of Sydney on 21 November 2025.

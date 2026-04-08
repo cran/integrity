@@ -1,0 +1,156 @@
+---
+title: "Getting Started with `integrity`"
+author: Sol Libesman, Kylie Hunter, David Nguyen, Dario Strbenac, Jie Kang <br>
+        The University of Sydney, Australia.
+output:
+  html_document:
+    toc: true
+vignette: >
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteIndexEntry{An Introduction to the integrity Package}
+---
+
+Increasing concerns about the trustworthiness of research have prompted calls to scrutinise studies' Individual Participant Data (IPD),
+but guidance on how to do this was lacking. integrity has been developed to screen randomised controlled trials (RCTs) for integrity issues.
+The software guides decision-making by determining whether a trial has no concerns, some concerns requiring further information, or
+major concerns warranting exclusion from evidence synthesis or publication.
+
+## Data Preparation
+
+Since the functionality is implemented in R, please import the data set into R. There are are variety of functions in R or cRAN packages to do this.
+
+- `read.csv` and `read.table` functions to import comma-separated and tab-separated text files.
+- `read.sas` for SAS, `read.sav` for SPSS and `read_dta` for STATA in the CRAN package [haven](https://haven.tidyverse.org/).
+- `read_excel` function for Microsoft Excel in the CRAN package [readxl](https://readxl.tidyverse.org/).
+
+An accompanying YAML file also needs to be written to describe the expected characteristics of each column.
+
+The top-level elements are required to be named:
+
+- `participantID`: The column name of the column which corresponds to the unique participant identifier. Mandatory.
+- `enrollemnt`: A list with three mandatory lists named `start`, `randomisation` and `end` specifying the
+column names of the date of enrollment, date or randomisation and date of the end of participation.
+- `baseline`: Lists named `dichotomous`, `polytomous`, `numeric` are for specifying the column name(s) of
+the column(s) which correspond(s) to baseline measurements.
+- `intervention`: A column name of the column specifying the intervention applied to the individuals.
+- `outcome`: A list of length up two, named `common` and `rare`, with sublists named by `dichotomous` or `polytomous`, containing the names of columns of those data types.
+- `correlated`: A named list of two entries of column names that are expected to be correlated.
+- `unexpected`: A named list of column names with values that are not expected to be seen. `days` is a special sublist of this list and applies to date columns, which are converted into days of the week before comparison. It must have two elements: `names`, which are the unexpected day names, and `locale`, which is the locale of the unexpected day names specified.
+
+`participantID`, `enrollment`, `baseline`, `intervention` and `outcome` are mandatory. Others only need to be specified if there is a column to annotate.
+
+View the YAML file corresponding to this dataset at `r system.file("extdata", "variables.yaml", package = "integrity")` for an example of the expected contents and structure.
+
+## Integrity Checks
+
+The checks are categorised into several domains.
+
+### Domain 1: Unusual or Repeated Patterns
+
+**Item 1**: Repeating patterns across baseline variables.
+**Item 2**: Repeating patterns within baseline variables.
+**Item 3**: Repeating patterns across baseline variables for rare outcome.
+**Item 4**: Bias in terminal digits.
+
+### Domain 2: Unusual or Repeated Patterns
+
+**Item 5**: Excessively homogeneous distribution of binary baseline variables.
+**Item 6**: Excessive imbalances of *continuous* baseline variables between groups.
+**Item 7**: Excessive imbalances of *categorical* baseline variables between groups.
+**Item 8**: Differential variability of numerical baseline characteristics between groups.
+
+### Domain 3: Correlations
+
+**Item 9**: Expected correlations between variables (e.g. height and weight).
+
+### Domain 4: Date Violations
+
+**Item 10**: Randomisation dates outside of the study period.
+
+### Domain 5: Participant Randomisation
+
+**Item 11**: Deviation from randomness of allocation of participants to treatments over time.
+**Item 12**: Deviation from randomness of allocation on days of the week.
+
+### Domain 6: Internal Consistency
+
+**Item 13**: Impossible or implausible values, e.g. Age at Menarche for a male participant.
+
+### Domain 7: External Consistency
+
+**Item 14**: Discrepancies between summary statistics calculated from data set and those presented in the corresponding journal article.
+
+### Domain 8: Data Plausibility
+
+**Item 15**: Too few missing data values or missing data overly similar between treatment groups.
+**Item 16**: Implausible event rates based on expert knowledge.
+
+Based on the YAML file, only checks that are relevant to the data set will be executed.
+
+## Case Study: Cord Management at Preterm Birth
+
+The data set bundled with this package is an extract from the [iCOMP study](https://ctc.usyd.edu.au/our-research/research-areas/evidence-integration/current-key-projects/icomp/). The main goal was to determine
+the optimal umbilical cord management strategy at preterm birth, such as milking or delayed cord clamping.
+
+## Data Loading and Preparation
+
+The data is in a Microsoft Excel file. There is one sheet.
+
+```{r}
+library(readxl)
+examplePath <- system.file("extdata", "dataset.xlsx", package = "integrity")
+dataset <- read_excel(examplePath)
+dataset[1:5, ]
+```
+
+The sample identifiers can be seen, as well as the first few clinical covariates. At this stage, categorical variables which only have
+one distinct value should be removed. This data has no such variables.
+
+The variable types and expectations need to be defined. The metadata representation language YAML is used for this purpose.
+
+```{r}
+library(yaml)
+example_path <- system.file("extdata", "variables.yaml", package = "integrity")
+dataset_info <- read_yaml(example_path)
+```
+
+On your computer, the file is located at `r examplePath`.
+
+## Running Checks
+
+Simply provide the data frame and data information to `run_checks`. The first step which automatically happens is data checking and cleaning, which ensures that all variables defined in the YAML file are present in the dataset, converts any variables annotated as factors but not factors into factors, and removes any columns that are entirely missing values.
+
+```{r}
+library(integrity)
+result <- run_checks(dataset, dataset_info)
+names(result)
+```
+
+This creates a list of three result types.
+
+Firstly, there is a check table with Pass or Fail statuses based on appropriate statistical tests.
+
+```{r}
+head(result[["check_table"]])
+```
+
+There are some interesting issues which may be examined further. Next is a list of four images. Here, the unexpected lacks of correlation between gestational age and birthweight is shown.
+
+```{r}
+names(result[["images"]])
+result[["images"]][["timeAndSize"]]
+```
+
+Finally, there is list of clinical summary tables; one for the measurements and one for the missingness.
+
+```{r}
+result[["summary_table"]]
+```
+
+## Computing Environment
+
+This vignette was executed on the following computing system:
+
+```{r}
+sessionInfo()
+```

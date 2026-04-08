@@ -1,0 +1,34 @@
+file: "dataset.xlsx"
+participantID: "infant_ID"
+enrollment:
+  start: "enrol_start"
+  randomisation: "rand_date"
+  end: "enrol_end"
+baseline:
+  dichotomous: "sex"
+  numeric:
+    - "mat_age"
+    - "GA_weeks"
+    - "birthweight"
+intervention: "treatment_cat"
+outcome:
+  common:
+      dichotomous:
+        - "IVH"
+        - "NEC"
+      polytomous: "CLD"
+  rare:
+    dichotomous: "inf_death"
+correlated:
+  timeAndSize:
+    - "GA_weeks"
+    - "birthweight"
+unexpected:
+  days:
+    names:
+      - "Saturday"
+      - "Sunday"
+    locale: "C"
+  mat_age:
+    - "less than 10"
+    - "greater than 50"
