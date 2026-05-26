@@ -1,6 +1,6 @@
 \name{run_checks}
 \alias{run_checks}
-\title{Run a Suite of Integirity Checks Based on Dataset Annotation}
+\title{Run a Suite of Integrity Checks Based on Dataset Annotation}
 \usage{
 run_checks(dataset, info, alpha = 0.05)
 }
@@ -14,9 +14,10 @@ See the vignette for detailed requirements.}
 Depending on the characteristics of the variables, some test may be skipped if the data type required for the test is not present.
 }
 \value{
-A \code{list} of length 3 with the element named \code{"check_table"} having the table of passes and fails,
+A \code{list} with the element named \code{"check_table"} having the table of passes and fails,
+the element named \code{"detail_tables"} storing additional per-variable results for selected checks,
 the element named \code{"images"} storing ggplot2 plots and the element named \code{"summary_table"} having an overview table of the
-variables split by intervention.
+baseline and outcome variables split by intervention.
 }
 \examples{
 if(interactive())

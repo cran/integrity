@@ -1,3 +1,5 @@
+export(read_metadata_excel)
+export(read_metadata_r)
 export(run_checks)
 importFrom(car,leveneTest)
 importFrom(dplyr,all_of)
@@ -19,5 +21,5 @@ importFrom(gtsummary,all_continuous)
 importFrom(gtsummary,add_p)
 importFrom(lubridate,wday)
 importFrom(rlang,.data)
-importFrom(stats, chisq.test, cor.test)
+importFrom(stats, chisq.test, complete.cases, cor.test)
 
