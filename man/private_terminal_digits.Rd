@@ -9,6 +9,7 @@
 }
 \description{
 Internal function documentation for developers. Creates a distribution plot of terminal digits
+with a separate y-axis scale for each variable.
 }
 \value{
 A \code{ggplot2} plot.

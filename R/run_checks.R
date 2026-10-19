@@ -164,8 +164,10 @@ run_checks <- function(dataset, info, alpha = 0.05)
   # Item 2
   if(length(baseline_columns) > 0)
   {
-    check_result <- .repeating_baseline(baseline_subset, "within")
+    results <- .repeating_baseline_within(dataset, info$baseline, intervention, info$enrollment$randomisation)
+    check_result <- .append_all_missing_variable_message(results[["check_table"]], baseline_removed_all_missing)
     check_tables <- c(check_tables, list(check_result))
+    images <- c(images, results[["images"]])
   }
   else
     check_tables <- c(check_tables, list(.skip_no_available_columns("Repeated Baselines Within Variables", info$baseline, baseline_removed_all_missing, "No baseline variables were provided.", "All nominated baseline variables were removed because all values were missing.")))
@@ -173,11 +175,11 @@ run_checks <- function(dataset, info, alpha = 0.05)
   # Item 3
   if(length(baseline_columns) > 0 && length(rare_columns) > 0)
   {
-    rare_participants <- sapply(dataset[, rare_columns, drop = FALSE], function(variable)
+    rare_participants <- do.call(cbind, lapply(dataset[, rare_columns, drop = FALSE], function(variable)
     {
       variable <- factor(variable)
       variable != levels(variable)[1]
-    })
+    }))
     rare_participants <- rowSums(rare_participants, na.rm = TRUE) > 0
     dataset_subset <- dataset[rare_participants, , drop = FALSE]
     check_result <- .repeating_baseline(dataset_subset[, baseline_columns, drop = FALSE], "across_rare")
@@ -190,7 +192,7 @@ run_checks <- function(dataset, info, alpha = 0.05)
   # Item 4
   if(length(numeric_columns) > 0)
   {
-    images <- list(`Terminal Digits` = .terminal_digits(dataset[, numeric_columns, drop = FALSE]))
+    images <- c(images, list(`Terminal Digits` = .terminal_digits(dataset[, numeric_columns, drop = FALSE])))
     check_result <- .check_result("Terminal Digits", "Displayed", "Terminal digit plot generated.")
     check_result <- .append_all_missing_variable_message(check_result, numeric_removed_all_missing)
     check_tables <- c(check_tables, list(check_result))
@@ -311,11 +313,19 @@ run_checks <- function(dataset, info, alpha = 0.05)
     check_tables <- c(check_tables, list(.skip_check("Cumulative Allocation", randomisation_missing_message)))
   } else if(has_intervention)
   {
-    plot_data <- dataset
-    colnames(plot_data)[match(intervention, colnames(plot_data))] <- "intervention"
-    colnames(plot_data)[match(info$enrollment$randomisation, colnames(plot_data))] <- "randomisation"
-    images <- c(images, list(`Cumulative Allocation` = ggplot2::ggplot(plot_data, ggplot2::aes(.data$randomisation, colour = .data$intervention)) + ggplot2::stat_ecdf() + ggplot2::labs(y = "Empirical Cumulative Distribution")))
-    check_tables <- c(check_tables, list(.check_result("Cumulative Allocation", "Displayed", "Cumulative allocation plot generated.")))
+    plot_data <- data.frame(randomisation = dataset[[info$enrollment$randomisation]], intervention = dataset[[intervention]])
+    plot_data <- plot_data[stats::complete.cases(plot_data), , drop = FALSE]
+    if(nrow(plot_data) > 0)
+    {
+      plot_data <- stats::aggregate(list(count = rep(1L, nrow(plot_data))),
+                                    by = plot_data, FUN = sum)
+      plot_data <- plot_data[order(plot_data$intervention, plot_data$randomisation), , drop = FALSE]
+      plot_data$count <- stats::ave(plot_data$count, plot_data$intervention, FUN = cumsum)
+      images <- c(images, list(`Cumulative Allocation` = ggplot2::ggplot(plot_data, ggplot2::aes(.data$randomisation, .data$count, colour = .data$intervention)) + ggplot2::geom_step() + ggplot2::labs(x = "Randomisation Date", y = "Cumulative Number of Participants")))
+      check_tables <- c(check_tables, list(.check_result("Cumulative Allocation", "Displayed", "Cumulative allocation counts plotted for participants with non-missing randomisation dates and intervention groups.")))
+    } else {
+      check_tables <- c(check_tables, list(.skip_check("Cumulative Allocation", "No participants had both a randomisation date and an intervention group.")))
+    }
   } else {
     check_tables <- c(check_tables, list(.skip_check("Cumulative Allocation", "An intervention variable and randomisation date are required.")))
   }

@@ -118,6 +118,104 @@
   }
 }
 
+.baseline_pattern_plot <- function(plot_data, y_mapping, xlab_label, has_intervention)
+{
+  plot <- ggplot2::ggplot(plot_data, ggplot2::aes(x = .data$index, y = .data[[y_mapping]]))
+  if(has_intervention)
+  {
+    plot <- ggplot2::ggplot(plot_data, ggplot2::aes(x = .data$index, y = .data[[y_mapping]], colour = .data$intervention))
+  }
+  
+  plot +
+    ggplot2::geom_point(alpha = 0.7) +
+    ggplot2::facet_wrap(ggplot2::vars(.data$variable), scales = "free_y") +
+    ggplot2::labs(y = "", x = xlab_label, colour = "Intervention")
+}
+
+.baseline_pattern_long_data <- function(dataset, columns, intervention)
+{
+  columns <- columns[columns %in% colnames(dataset)]
+  if(length(columns) == 0) return(NULL)
+  
+  plot_data <- do.call(rbind, lapply(columns, function(column)
+  {
+    data.frame(
+      variable = column,
+      index = seq_len(nrow(dataset)),
+      value = dataset[[column]],
+      value_character = as.character(dataset[[column]]),
+      row.names = NULL
+    )
+  }))
+  
+  if(.has_columns(dataset, intervention))
+    plot_data[["intervention"]] <- rep(dataset[[intervention]], times = length(columns))
+  
+  plot_data
+}
+
+.repeating_baseline_within <- function(dataset, baseline, intervention, randomisation)
+{
+  baseline_columns <- .available_columns(dataset, baseline)
+  if(length(baseline_columns) == 0)
+    return(list(
+      check_table = .skip_check("Repeated Baselines Within Variables", "No baseline variables were provided."),
+      images = list()
+    ))
+  
+  if(.is_date_column(dataset, randomisation))
+  {
+    order_index <- order(dataset[[randomisation]], seq_len(nrow(dataset)), na.last = TRUE)
+    xlab_label <- "Participant order by randomisation date"
+    details <- "Baseline pattern plots generated after sorting participants by randomisation date."
+  } else {
+    order_index <- seq_len(nrow(dataset))
+    xlab_label <- "Participant order by row number"
+    details <- paste(
+      "Baseline pattern plots generated using dataset row order.",
+      "Caution: No randomisation date was provided. Ensure the dataset is arranged by recruitment date where possible; otherwise, apparent repeating patterns should be interpreted with caution."
+    )
+  }
+  
+  ordered_dataset <- dataset[order_index, , drop = FALSE]
+  numeric_columns <- intersect(.info_columns(baseline$numeric), baseline_columns)
+  categorical_columns <- intersect(.info_columns(baseline[c("dichotomous", "polytomous")]), baseline_columns)
+  uncategorised_columns <- setdiff(baseline_columns, c(numeric_columns, categorical_columns))
+  categorical_columns <- c(categorical_columns, uncategorised_columns)
+  has_intervention <- .has_columns(ordered_dataset, intervention)
+  images <- list()
+  
+  continuous_data <- .baseline_pattern_long_data(ordered_dataset, numeric_columns, intervention)
+  if(!is.null(continuous_data))
+  {
+    continuous_data[["value_numeric"]] <- suppressWarnings(as.numeric(continuous_data[["value"]]))
+    continuous_data <- continuous_data[!is.na(continuous_data[["value_numeric"]]), , drop = FALSE]
+    if(nrow(continuous_data) > 0)
+      images[["Repeated Baselines Within Variables - Continuous"]] <- .baseline_pattern_plot(continuous_data, "value_numeric", xlab_label, has_intervention)
+  }
+  
+  categorical_data <- .baseline_pattern_long_data(ordered_dataset, categorical_columns, intervention)
+  if(!is.null(categorical_data))
+  {
+    categorical_data <- categorical_data[!is.na(categorical_data[["value_character"]]), , drop = FALSE]
+    if(nrow(categorical_data) > 0)
+      images[["Repeated Baselines Within Variables - Categorical"]] <- .baseline_pattern_plot(categorical_data, "value_character", xlab_label, has_intervention)
+  }
+  
+  if(length(images) == 0)
+  {
+    return(list(
+      check_table = .skip_check("Repeated Baselines Within Variables", "No non-missing baseline values were available for plotting."),
+      images = list()
+    ))
+  }
+  
+  list(
+    check_table = .check_result("Repeated Baselines Within Variables", "Displayed", details),
+    images = images
+  )
+}
+
 # Data set subset to numeric variables by runner function. Returns an image, not a quality information row.
 .terminal_digits <- function(dataset_subset)
 {
@@ -136,7 +234,7 @@
   plot_data <- dplyr::bind_rows(plot_data, .id = "variable")
   plot_data$terminals <- factor(plot_data$terminals, levels = 0:9)
   
-  ggplot2::ggplot(plot_data, ggplot2::aes(.data$terminals, .data$Freq)) + ggplot2::geom_col() + ggplot2::facet_wrap(ggplot2::vars(.data$variable), drop = FALSE) + 
+  ggplot2::ggplot(plot_data, ggplot2::aes(.data$terminals, .data$Freq)) + ggplot2::geom_col() + ggplot2::facet_wrap(ggplot2::vars(.data$variable), scales = "free_y", drop = FALSE) +
     ggplot2::labs(x = "Terminal Digit", y = "Frequency")
 }
 
@@ -144,7 +242,7 @@
 .adjacent_pair_test_binary <- function(variable)
 {
   variable <- factor(variable)
-  if(length(levels(variable)) < 2)
+  if(length(variable) < 2 || length(levels(variable)) != 2)
     return(list(
       total_adjacent_pairs = NA_integer_,
       observed_consecutive_pairs = NA_integer_,
@@ -232,28 +330,38 @@
 .excessivelly_homogenous_adjacent <- function(dataset_subset, type = c("baseline", "intervention"), alpha)
 {
   type <- match.arg(type)
-  p_values <- apply(dataset_subset, 2, function(variable)
+  p_values <- vapply(dataset_subset, function(variable)
   {
     .adjacent_pair_test_binary(variable)$p_value
-  })
+  }, numeric(1))
   if(type == "baseline")
   {
+    untestable <- names(p_values)[!is.finite(p_values)]
+    untestable_note <- if(length(untestable) > 0)
+      paste("Could not test variables:", paste(untestable, collapse = ", ")) else NULL
+    if(all(!is.finite(p_values)))
+      return(.skip_check("Consecutive Baseline Binary", paste("No binary baseline variables could be tested.", untestable_note)))
     if(any(p_values < alpha, na.rm = TRUE))
     {
-      non_uniform <- colnames(dataset_subset)[p_values < alpha]
+      non_uniform <- names(p_values)[!is.na(p_values) & p_values < alpha]
       if(length(non_uniform) == 1) info_text <- "Variable" else info_text <- "Variables"
       info_text <- paste(info_text, paste(non_uniform, collapse = ", "))
       if(length(non_uniform) == 1) info_text <- paste(info_text, "has") else info_text <- paste(info_text, "have")
       info_text <- paste(info_text, "statistically significant runs of values using \u03c7\u00b2 test.")
-      .check_result("Consecutive Baseline Binary", "Fail", info_text)
+      check_result <- .check_result("Consecutive Baseline Binary", "Fail", info_text)
       } else {
-      .check_result("Consecutive Baseline Binary", "Pass", "No significant differences using \u03c7\u00b2 test.")
+      check_result <- .check_result("Consecutive Baseline Binary", "Pass", "No significant differences using \u03c7\u00b2 test for the variables tested.")
     }
+    if(!is.null(untestable_note))
+      check_result[["Details"]] <- paste(check_result[["Details"]], untestable_note)
+    check_result
   } else {
     intervention_name <- colnames(dataset_subset)[1]
     variable <- dataset_subset[[1]]
     adjacent_result <- .adjacent_pair_test_binary(variable)
     runs_result <- .runs_test_binary(variable)
+    if(!is.finite(adjacent_result$p_value) && !is.finite(runs_result$p_value))
+      return(.skip_check("Allocation Pattern", "Neither the adjacent-pairs chi-squared test nor the runs test could be calculated."))
     is_flagged <- isTRUE(adjacent_result$p_value < alpha) || isTRUE(runs_result$p_value < alpha)
     if(is_flagged)
     {
@@ -269,7 +377,7 @@
   do.call(rbind, lapply(colnames(dataset_subset), function(variable_name)
   {
     variable <- factor(dataset_subset[[variable_name]])
-    if(length(levels(variable)) < 2)
+    if(length(variable) < 2 || length(levels(variable)) != 2)
       return(data.frame(
         Variable = variable_name,
         TotalAdjacentPairs = NA_integer_,
@@ -502,6 +610,7 @@
   type <- match.arg(type)
   if(type == "numeric")
     summary <- gtsummary::tbl_summary(dataset_subset, by = dplyr::all_of(intervention),
+                                      type = list(dplyr::all_of(setdiff(colnames(dataset_subset), intervention)) ~ "continuous"),
                                       statistic = list(gtsummary::all_continuous() ~ "{mean} ({sd})"))
   else
     summary <- gtsummary::tbl_summary(dataset_subset, by = dplyr::all_of(intervention))
@@ -524,6 +633,7 @@
   type <- match.arg(type)
   if(type == "numeric")
     summary <- gtsummary::tbl_summary(dataset_subset, by = dplyr::all_of(intervention),
+                                      type = list(dplyr::all_of(setdiff(colnames(dataset_subset), intervention)) ~ "continuous"),
                                       statistic = list(gtsummary::all_continuous() ~ "{mean} ({sd})"))
   else
     summary <- gtsummary::tbl_summary(dataset_subset, by = dplyr::all_of(intervention))
@@ -603,7 +713,10 @@
 
 .detail_randomisation_date_range <- function(dataset, enrollment)
 {
-  enrollment_columns <- c(enrollment$start, enrollment$randomisation, enrollment$end)
+  enrollment_columns <- .info_columns(c(enrollment$start, enrollment$randomisation, enrollment$end))
+  if(length(enrollment_columns) < 3)
+    return(NULL)
+  
   if(!.has_columns(dataset, enrollment_columns) || !all(sapply(enrollment_columns, function(column) .is_date_column(dataset, column))))
     return(NULL)
   
@@ -748,8 +861,8 @@
   }
   
   # Enrollment dates and randomisation dates.
-  enrollment_columns <- c(enrollment$start, enrollment$randomisation, enrollment$end)
-  if(.has_columns(dataset, enrollment_columns) && all(sapply(enrollment_columns, function(column) .is_date_column(dataset, column))))
+  enrollment_columns <- .info_columns(c(enrollment$start, enrollment$randomisation, enrollment$end))
+  if(length(enrollment_columns) == 3 && .has_columns(dataset, enrollment_columns) && all(sapply(enrollment_columns, function(column) .is_date_column(dataset, column))))
   {
     infeasible_start <-  dataset[[enrollment$randomisation]] < dataset[[enrollment$start]]
     infeasible_end <- dataset[[enrollment$randomisation]] > dataset[[enrollment$end]]

@@ -1,9 +1,8 @@
+## ----eval=FALSE---------------------------------------------------------------
+# install.packages(c("integrity", "rmarkdown", "knitr", "readxl"))
+
 ## -----------------------------------------------------------------------------
-if(requireNamespace("pkgload", quietly = TRUE) && file.exists("../DESCRIPTION")) {
-  pkgload::load_all("..")
-} else {
-  library(integrity)
-}
+library(integrity)
 
 ## ----warning =F---------------------------------------------------------------
 
@@ -40,6 +39,11 @@ dataset_info <- list(
   correlated = list(
     timeAndSize = c("GA_weeks", "birthweight")
   ),
+    # Example with two variable pairs (replace names with your own numeric columns):
+  # correlated = list(
+  #   timeAndSize = c("GA_weeks", "birthweight"),
+  #   heightAndWeight = c("height", "weight")
+  # ),
   unexpected = list(
     days = list(
       names = c("Saturday", "Sunday"),
@@ -50,10 +54,6 @@ dataset_info <- list(
   )
 )
 
-## ----eval=FALSE---------------------------------------------------------------
-# example_excel_path <- system.file("extdata", "variables_template.xlsx", package = "integrity")
-# dataset_info <- read_metadata_excel(example_excel_path)
-
 ## -----------------------------------------------------------------------------
 result <- run_checks(dataset, dataset_info)
 names(result)
@@ -61,6 +61,10 @@ names(result)
 ## -----------------------------------------------------------------------------
 item_1_1 <- result[["check_table"]][result[["check_table"]][["ItemNumber"]] == "1.1", c("Item description", "Status", "Details"), drop = FALSE]
 knitr::kable(item_1_1, row.names = FALSE)
+baseline_pattern_plots <- grep("^Repeated Baselines Within Variables - ", names(result[["images"]]), value = TRUE)
+for(plot_name in baseline_pattern_plots) {
+  print(result[["images"]][[plot_name]])
+}
 
 ## -----------------------------------------------------------------------------
 item_1_2 <- result[["check_table"]][result[["check_table"]][["ItemNumber"]] == "1.2", c("Item description", "Status", "Details"), drop = FALSE]
@@ -100,7 +104,7 @@ if(!is.null(result[["detail_tables"]][["2.4"]])) knitr::kable(result[["detail_ta
 ## -----------------------------------------------------------------------------
 item_3_1 <- result[["check_table"]][result[["check_table"]][["ItemNumber"]] == "3.1", c("Item description", "Status", "Details"), drop = FALSE]
 knitr::kable(item_3_1, row.names = FALSE)
-correlation_plots <- setdiff(names(result[["images"]]), c("Terminal Digits", "Cumulative Allocation", "Days"))
+correlation_plots <- intersect(names(dataset_info[["correlated"]]), names(result[["images"]]))
 for(plot_name in correlation_plots) {
   print(result[["images"]][[plot_name]])
 }

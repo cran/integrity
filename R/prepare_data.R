@@ -72,7 +72,7 @@
   }
   
   remove <- sapply(dataset, function(column) all(is.na(column)))
-  if(any(remove)) dataset <- dataset[, !remove]
+  if(any(remove)) dataset <- dataset[, !remove, drop = FALSE]
     
   dataset
 }

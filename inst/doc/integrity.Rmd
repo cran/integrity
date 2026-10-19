@@ -1,6 +1,6 @@
 ---
 title: "Getting Started with `integrity`"
-author:   Sol Libesman, David Nguyen,  Dario Strbenac, Jie Kang, Lene Seidler, Kylie Hunter <br>
+author:   Sol Libesman, David Nguyen, Dario Strbenac, Jie Kang, Anna Lene Seidler, Kylie Hunter <br>
         The University of Sydney, Australia.
 output:
   html_document:
@@ -73,17 +73,27 @@ If you use our package please cite:
 
 Each step of the workflow is illustrated using a case study on umbilical cord management at preterm birth, based on a de-identified and altered data set from the [iCOMP study](https://doi.org/10.1016/S0140-6736(23)02468-6). The main goal was to determine the optimal umbilical cord management strategy at preterm birth, such as milking or delayed cord clamping.
 
+You can download the editable R Markdown (`.Rmd`) vignette to run the case study on your own computer or adapt it to generate a report using your own data.
+
+1. Open the [integrity CRAN package page](https://CRAN.R-project.org/package=integrity). Under **Vignettes**, find **An Introduction to the integrity Package** and right-click its **source** link, then select **Save link as...** (or the equivalent option in your browser).
+2. Choose the relevant download location and name the file `my_integrity_report.Rmd`. Ensure the filename ends in `.Rmd`, rather than `.Rmd.txt`. If your browser displays the source as plain text, use **Save As** to save it with the `.Rmd` extension.
+3. In RStudio, select **File > Open File** and open `my_integrity_report.Rmd` from your chosen download location. Follow the one-time installation instructions in **Step 1: Data loading**, then replace the bundled example-data import with an import of your own dataset. Use the full path to your data file, or place it beside the `.Rmd` file and use its filename. On Windows, use forward slashes in R file paths, for example `C:/Users/YourName/Desktop/my_data.xlsx`.
+4. In **Step 2: Data preparation**, edit `dataset_info` so its column names, variable types, and expected values match your dataset. Remove optional metadata entries that do not apply. You can also update the report title, author, and case-study text for your study.
+5. Save your changes and click **Knit** in RStudio to generate an HTML report. Review the status tables, caution messages, and plots before interpreting the results.
+
 
 ## Step 1: Data loading
 
-Load the integrity package into R.
+Before knitting this report for the first time, run the following command in the RStudio Console to install the package and the packages used by this example. This installation command is not run automatically when you knit the report. Install any additional packages needed to import your own data separately.
+
+```{r, eval=FALSE}
+install.packages(c("integrity", "rmarkdown", "knitr", "readxl"))
+```
+
+Load the integrity package into R each time you run the report.
 
 ```{r}
-if(requireNamespace("pkgload", quietly = TRUE) && file.exists("../DESCRIPTION")) {
-  pkgload::load_all("..")
-} else {
-  library(integrity)
-}
+library(integrity)
 ```
 
 Next, import the data set you wish to examine into R. There are a variety of functions in R or CRAN packages to do this:
@@ -110,22 +120,24 @@ In the tibble above, the sample identifiers can be seen (`infant_ID`), as well a
 ## Step 2: Data preparation 
 
 
-The following elements are required to be paired with the corresponding column names in your data set:
+The `integrity` tool requires a list of trial metadata that maps the variables in your dataset to the relevant integrity checks. For each element you supply, specify the corresponding column name(s) in your dataset:
 
 - `participantID`: The name of the column which corresponds to the unique participant identifier (this variable is mandatory).
 - `enrollment`: lists the names of three columns corresponding to `start` (date of first participant enrollment), `randomisation` (date of participant randomisation) and `end` (date of the last participant enrollment).
 - `baseline`: lists named `dichotomous`, `polytomous`, `numeric` are for specifying the column name(s) of
 the column(s) which correspond(s) to baseline measurements.
-- `intervention`: the name of the column specifying the intervention or group allocation for each individual (this variable is mandatory).
+- `intervention`: the name of the column specifying the intervention or group allocation for each individual (required for comparisons between study groups).
 - `outcome`: lists named `common` and `rare`, with sublists named by `dichotomous`, `numeric` or `polytomous`, containing the names of columns of those data types for outcomes assessed.
-- `correlated`: A named list of two entries of column names that are expected to be correlated.
+- `correlated`: A named list of variable pairs expected to be correlated, with two column names per pair.
 - `unexpected`: A named list of column names with values that are not expected to be seen. `days` is a special sublist and applies to date columns, which are converted into days of the week before comparison. It must have two elements: `names`, which are the unexpected day names, and `locale`, which is the locale of the unexpected day names specified.
 
-Only `participantID` is strictly required. `enrollment`, `baseline`, `intervention`, `outcome`, `correlated`, and `unexpected` should be supplied when available; if a section is omitted, the checks that depend on it will be skipped.
+Only `participantID` is strictly required. Supply `enrollment`, `baseline`, `intervention`, `outcome`, `correlated`, and `unexpected` when available. If your dataset does not contain a variable, remove its optional metadata entry or comment it out by placing `#` at the start of the relevant line(s). For example, no polytomous baseline variables exist in the case study and so that entry is commented out in the code below. Checks that require the omitted variable will be skipped.
 
-The variable types and expectations need to be defined before running the checks. The package accepts the same metadata structure which may be created in multiple different formats depending on your preference: a list written directly in a R script or markdown, or an Excel template workbook.
+If date columns are imported as text, convert them to R dates or date-times before running the checks. For example, `as.Date(x, format = "%Y-%m-%d")` converts text dates such as `2026-10-12`; adjust the format to match your data. Randomisation-date plots require a recognised date or date-time column.
 
-Coding the list directly in R as below, is often the simplest option for users already working inside an R script or an R Markdown document, because the metadata can be written directly next to the analysis code. The R code below may be used as a template and altered based on relevant variables in a new dataset.
+The variable types and expectations need to be defined before running the checks. The example below defines this metadata as a named list written directly in R.
+
+Coding the list directly in R as below, is the simplest option for users already working inside an R script or an R Markdown document, because the metadata can be written directly next to the analysis code. The R code below may be used as a template and altered based on relevant variables in a new dataset.
 
 ```{r}
 dataset_info <- list(
@@ -155,6 +167,11 @@ dataset_info <- list(
   correlated = list(
     timeAndSize = c("GA_weeks", "birthweight")
   ),
+    # Example with two variable pairs (replace names with your own numeric columns):
+  # correlated = list(
+  #   timeAndSize = c("GA_weeks", "birthweight"),
+  #   heightAndWeight = c("height", "weight")
+  # ),
   unexpected = list(
     days = list(
       names = c("Saturday", "Sunday"),
@@ -169,23 +186,10 @@ dataset_info <- list(
 In the `unexpected$days` section, `locale` controls the language used when R converts dates into weekday names. `locale = "C"` is the most likely option to use because it returns standard English weekday names such as `Saturday` and `Sunday`, which usually match the values entered in `names`. Other locale values are possible if your system or dataset uses a different language or naming convention, but `"C"` will usually be the safest default.
 
 
-An Excel template is also available if users prefer to enter the metadata in a spreadsheet. The workbook has one row per entry and four columns named `level_1`, `level_2`, `level_3`, and `value`. Repeated values, such as several numeric baseline variables, are entered as multiple rows.
-
-
-This workbook can be edited in Microsoft Excel, then imported into R with `read_metadata_excel()`.
-
-
-```{r, eval=FALSE}
-example_excel_path <- system.file("extdata", "variables_template.xlsx", package = "integrity")
-dataset_info <- read_metadata_excel(example_excel_path)
-```
-
-
-
 ## Step 3: Running integrity checks
 
 
-Simply provide the data frame and data information to `run_checks`. The function first performs automated data checking and cleaning to ensure that all variables defined in the `dataset_info` file are present in the dataset. The function will also convert columns nominated as factors into factors where required, and remove any columns containing only missing values.
+Simply provide the data frame from the trial you are checking (in this case `dataset`) and data information list (`dataset_info`) to `run_checks`. The function first performs automated data checking and cleaning to check whether the nominated variables are present and report missing columns. The function will also convert columns nominated as factors into factors where required, and remove any columns containing only missing values.
 
 ```{r}
 result <- run_checks(dataset, dataset_info)
@@ -202,11 +206,17 @@ The sections below present the output from the integrity  `run_checks` function,
 
 **Item 1.1**: Repeating patterns within baseline variables
 
-This item is manually performed by sorting and visually inspecting the data to identify repeating patterns within baseline variables, e.g. check whether values appear to repeat at regular intervals, which may indicate rows were copied and pasted. Rare or unusual entries can be particularly useful for detecting such patterns; assess whether these entries recur systematically, such as every 11 rows. Perform these assessments using the original dataset order, randomisation order, and separately within each study group.
+This item involves sorting and visually inspecting baseline variables for repeating patterns that may indicate rows have been copied and pasted. Look for values that recur at regular intervals. Rare or unusual entries can be particularly informative, for example, an unusual value that appears every 11 rows.
+
+The plots below support visual inspection of continuous and categorical baseline variables. Participants are ordered by randomisation date when available, and points are coloured by study group. If no usable randomisation date is available, participants are plotted in dataset row order. In this case, interpret patterns cautiously, as they may reflect how the dataset was sorted. For continuous variables, values should generally display a random scatter across participants, with no obvious repeating sequences or regular spacing. For categorical variables, categories should also appear randomly distributed. Large, recurring gaps between participants with the same category may indicate a non-random pattern, although such gaps can occur naturally when a category is rare. Points are coloured by study group to help visualise patterns both within and between groups. Consider whether the overall distribution appears genuinely random or whether repeating sequences, regular intervals, unusual clustering, or other systematic patterns suggest potential data irregularities.
 
 ```{r}
 item_1_1 <- result[["check_table"]][result[["check_table"]][["ItemNumber"]] == "1.1", c("Item description", "Status", "Details"), drop = FALSE]
 knitr::kable(item_1_1, row.names = FALSE)
+baseline_pattern_plots <- grep("^Repeated Baselines Within Variables - ", names(result[["images"]]), value = TRUE)
+for(plot_name in baseline_pattern_plots) {
+  print(result[["images"]][[plot_name]])
+}
 ```
 
 **Item 1.2**: Repeating data patterns across baseline variables
@@ -227,7 +237,7 @@ knitr::kable(item_1_3, row.names = FALSE)
 
 **Item 1.4**: Bias in the terminal (rightmost) digits.
 
-This item plots the terminal digit for the selected continuous variables (avoid variables that tend to be rounded or that lack precision). Inspect the bar charts for biased or unexpected distribution. 
+This item plots the terminal digit for the selected continuous variables (avoid variables that tend to be rounded or that lack precision). Each variable has its own y-axis scale. Inspect the bar charts for biased or unexpected distribution.
 
 
 ```{r}
@@ -290,7 +300,7 @@ This item plots the correlation between selected continuous variables and calcul
 ```{r}
 item_3_1 <- result[["check_table"]][result[["check_table"]][["ItemNumber"]] == "3.1", c("Item description", "Status", "Details"), drop = FALSE]
 knitr::kable(item_3_1, row.names = FALSE)
-correlation_plots <- setdiff(names(result[["images"]]), c("Terminal Digits", "Cumulative Allocation", "Days"))
+correlation_plots <- intersect(names(dataset_info[["correlated"]]), names(result[["images"]]))
 for(plot_name in correlation_plots) {
   print(result[["images"]][[plot_name]])
 }
