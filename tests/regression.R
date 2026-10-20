@@ -30,19 +30,20 @@ stopifnot(
 )
 
 # Undefined tests must not produce an unconditional Pass.
-result <- run_checks(
+result <- suppressWarnings(run_checks(
   data.frame(id = 1:12, constant = rep(0, 12)),
   list(participantID = "id", baseline = list(dichotomous = "constant"))
-)
+))
 stopifnot(item(result, "2.1")$Status == "Skipped")
 mixed_binary <- suppressWarnings(internal(".excessivelly_homogenous_adjacent")(
   data.frame(constant = rep(0, 12), variable = rep(0:1, 6)), alpha = 0.05
 ))
 stopifnot(grepl("Could not test variables: constant", mixed_binary$Details))
-no_adjacent <- internal(".excessivelly_homogenous_adjacent")(
+missing_sequence <- internal(".excessivelly_homogenous_adjacent")(
   data.frame(binary = c(0, NA, 1)), alpha = 0.05
 )
-stopifnot(no_adjacent$Status == "Skipped")
+stopifnot(missing_sequence$Status == "Pass",
+          grepl("Missing baseline values were omitted", missing_sequence$Details))
 
 # A single participant must not collapse the rare-outcome matrix.
 result <- run_checks(

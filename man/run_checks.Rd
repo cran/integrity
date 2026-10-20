@@ -13,6 +13,26 @@ See the vignette for detailed requirements.}
 \description{
 Depending on the characteristics of the variables, some test may be skipped if the data type required for the test is not present.
 }
+\details{
+Item 2.1 uses a two-sided Wald-Wolfowitz runs test for each nominated binary
+baseline variable. Records are sorted by the randomisation date column nominated
+in \code{info$enrollment$randomisation}; tied dates retain original row order.
+The column must be a \code{Date} or date-time column. Records with missing dates
+are excluded from this item with a warning when other dates are available.
+If no usable dates are available, the item uses dataset row order and issues a
+warning. The ordering used and excluded date count are recorded in the output.
+Missing baseline values are omitted
+within each variable, joining the remaining observations into a sequence.
+Variables without exactly two observed levels cannot be tested.
+
+When either category has 10 or fewer observations, the test uses the exact
+conditional distribution given the category counts. Its p-value is twice the
+smaller inclusive tail probability, capped at one. Otherwise it uses a normal
+approximation without continuity correction. The detailed output reports the
+method, observed and expected runs, missing counts, and p-values. The item flags
+any tested variable with a p-value below \code{alpha}; no multiplicity correction
+is applied.
+}
 \value{
 A \code{list} with the element named \code{"check_table"} having the table of passes and fails,
 the element named \code{"detail_tables"} storing additional per-variable results for selected checks,

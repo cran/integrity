@@ -250,10 +250,11 @@ if("Terminal Digits" %in% names(result[["images"]])) {
 
 ### Domain 2: Baseline characteristics
 
-**Item 2.1**:  Excessively homogeneous distribution of binary baseline variables, i.e. loss of independence between consecutive variables
+**Item 2.1**:  Excessively homogeneous distribution of binary baseline variables, i.e. loss of independence between consecutive observations
 
-In RCTs we expect binary baseline data to occur in a manner independent of previous values (i.e., to occur randomly). The runs test examines whether baseline data occurs in a random manner based on row order. Statistically significant (p < 0.05) chi-squared tests may be indicative of an integrity issue.
-Note: if row order is not sorted chronologically by randomisation date and time this test may be invalid.
+The two-sided Wald-Wolfowitz runs test checks whether binary baseline values have unusually few or unusually many runs (consecutive blocks of the same value). The detailed table reports observed and expected runs, p values, and the test method. When either category has 10 or fewer observations, an exact conditional test is used: the two-sided p value is twice the smaller inclusive tail probability, capped at one. Otherwise, the test uses a normal approximation without continuity correction.
+
+The test automatically orders participants by randomisation date. If no usable randomisation date variable is available, the test uses dataset row order and results may be invalid. A significant result requires contextual review, particularly for rare categories, time trends, and multiple tests; it does not establish an integrity problem by itself.
 
 ```{r}
 item_2_1 <- result[["check_table"]][result[["check_table"]][["ItemNumber"]] == "2.1", c("Item description", "Status", "Details"), drop = FALSE]

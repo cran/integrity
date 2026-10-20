@@ -205,8 +205,38 @@ run_checks <- function(dataset, info, alpha = 0.05)
   if(length(dichotomous_baseline) > 0)
   {
     dataset_subset <- dataset[, dichotomous_baseline, drop = FALSE]
-    check_tables <- c(check_tables, list(.excessivelly_homogenous_adjacent(dataset_subset, alpha = alpha)))
-    detail_tables[["2.1"]] <- .detail_excessivelly_homogenous_adjacent(dataset_subset, alpha)
+    excluded_missing_dates <- 0L
+    if(has_randomisation && any(!is.na(dataset[[info$enrollment$randomisation]])))
+    {
+      dates <- dataset[[info$enrollment$randomisation]]
+      order_index <- order(dates, seq_len(nrow(dataset)), na.last = NA)
+      dataset_subset <- dataset_subset[order_index, , drop = FALSE]
+      excluded_missing_dates <- sum(is.na(dates))
+      order_basis <- "Sorted by randomisation date; ties retain original row order"
+      order_note <- paste("Runs tests use randomisation-date order from",
+                          paste0("`", info$enrollment$randomisation, "`."),
+                          "Tied dates retain original row order.")
+      if(excluded_missing_dates > 0L)
+      {
+        missing_date_note <- paste("Item 2.1: Excluded", excluded_missing_dates,
+          if(excluded_missing_dates == 1L) "record" else "records",
+          "with missing randomisation dates because their chronological position is unknown.")
+        warning(missing_date_note, call. = FALSE)
+        order_note <- paste(order_note, missing_date_note)
+      }
+    } else {
+      order_basis <- "Dataset row order; no usable randomisation date"
+      order_note <- paste("Item 2.1: No usable randomisation date column was supplied.",
+        "Runs tests use dataset row order, which may not reflect randomisation order.")
+      warning(order_note, call. = FALSE)
+      order_note <- paste("Warning:", order_note)
+    }
+    check_result <- .excessivelly_homogenous_adjacent(dataset_subset, alpha = alpha)
+    check_result[["Details"]] <- paste(check_result[["Details"]], order_note)
+    check_tables <- c(check_tables, list(check_result))
+    detail_tables[["2.1"]] <- .detail_baseline_runs(dataset_subset, alpha)
+    detail_tables[["2.1"]][["OrderBasis"]] <- order_basis
+    detail_tables[["2.1"]][["ExcludedMissingDates"]] <- excluded_missing_dates
   } else
     check_tables <- c(check_tables, list(.skip_check("Consecutive Baseline Binary", "No dichotomous baseline variables were provided.")))
   

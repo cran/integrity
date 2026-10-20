@@ -286,7 +286,26 @@
   )
 }
 
-.runs_test_binary <- function(variable)
+# Conditional distribution of runs given the two category totals. The two-sided
+# p-value doubles the smaller inclusive tail, capped at one.
+.exact_runs_pvalue <- function(runs, n1, n2)
+{
+  possible_runs <- seq.int(2L, min(n1 + n2, 2L * min(n1, n2) + 1L))
+  log_total <- lchoose(n1 + n2, n1)
+  probabilities <- vapply(possible_runs, function(r)
+  {
+    k <- r %/% 2L
+    if(r %% 2L == 0L)
+      return(exp(log(2) + lchoose(n1 - 1, k - 1) +
+                   lchoose(n2 - 1, k - 1) - log_total))
+    exp(lchoose(n1 - 1, k) + lchoose(n2 - 1, k - 1) - log_total) +
+      exp(lchoose(n1 - 1, k - 1) + lchoose(n2 - 1, k) - log_total)
+  }, numeric(1))
+  min(1, 2 * min(sum(probabilities[possible_runs <= runs]),
+                 sum(probabilities[possible_runs >= runs])))
+}
+
+.runs_test_binary <- function(variable, exact = FALSE)
 {
   variable <- stats::na.omit(variable)
   variable <- factor(variable)
@@ -297,7 +316,7 @@
       variance = NA_real_,
       z = NA_real_,
       p_value = NA_real_,
-      note = "Runs test requires exactly two non-missing intervention levels."
+      note = "Runs test requires exactly two non-missing levels."
     ))
   
   values <- as.character(variable)
@@ -306,6 +325,15 @@
   n2 <- sum(variable == levels(variable)[2])
   expected_runs <- 1 + (2 * n1 * n2) / (n1 + n2)
   variance_runs <- (2 * n1 * n2 * (2 * n1 * n2 - n1 - n2)) / (((n1 + n2)^2) * (n1 + n2 - 1))
+  if(exact)
+    return(list(
+      runs = runs,
+      expected_runs = expected_runs,
+      variance = variance_runs,
+      z = NA_real_,
+      p_value = .exact_runs_pvalue(runs, n1, n2),
+      note = NA_character_
+    ))
   if(is.na(variance_runs) || variance_runs <= 0)
     return(list(
       runs = runs,
@@ -330,12 +358,10 @@
 .excessivelly_homogenous_adjacent <- function(dataset_subset, type = c("baseline", "intervention"), alpha)
 {
   type <- match.arg(type)
-  p_values <- vapply(dataset_subset, function(variable)
-  {
-    .adjacent_pair_test_binary(variable)$p_value
-  }, numeric(1))
   if(type == "baseline")
   {
+    results <- .detail_baseline_runs(dataset_subset, alpha)
+    p_values <- stats::setNames(results$PValue, results$Variable)
     untestable <- names(p_values)[!is.finite(p_values)]
     untestable_note <- if(length(untestable) > 0)
       paste("Could not test variables:", paste(untestable, collapse = ", ")) else NULL
@@ -347,13 +373,16 @@
       if(length(non_uniform) == 1) info_text <- "Variable" else info_text <- "Variables"
       info_text <- paste(info_text, paste(non_uniform, collapse = ", "))
       if(length(non_uniform) == 1) info_text <- paste(info_text, "has") else info_text <- paste(info_text, "have")
-      info_text <- paste(info_text, "statistically significant runs of values using \u03c7\u00b2 test.")
+      info_text <- paste(info_text, "a statistically significant Wald-Wolfowitz runs test.")
       check_result <- .check_result("Consecutive Baseline Binary", "Fail", info_text)
       } else {
-      check_result <- .check_result("Consecutive Baseline Binary", "Pass", "No significant differences using \u03c7\u00b2 test for the variables tested.")
+      check_result <- .check_result("Consecutive Baseline Binary", "Pass", "No statistically significant Wald-Wolfowitz runs tests for the variables tested.")
     }
     if(!is.null(untestable_note))
       check_result[["Details"]] <- paste(check_result[["Details"]], untestable_note)
+    if(any(results$Missing > 0))
+      check_result[["Details"]] <- paste(check_result[["Details"]],
+        "Missing baseline values were omitted within each variable; runs connect the remaining observations.")
     check_result
   } else {
     intervention_name <- colnames(dataset_subset)[1]
@@ -372,61 +401,26 @@
   }
 }
 
-.detail_excessivelly_homogenous_adjacent <- function(dataset_subset, alpha)
+.detail_baseline_runs <- function(dataset_subset, alpha)
 {
   do.call(rbind, lapply(colnames(dataset_subset), function(variable_name)
   {
-    variable <- factor(dataset_subset[[variable_name]])
-    if(length(variable) < 2 || length(levels(variable)) != 2)
-      return(data.frame(
-        Variable = variable_name,
-        TotalAdjacentPairs = NA_integer_,
-        ObservedConsecutivePairs = NA_integer_,
-        ObservedNonConsecutivePairs = NA_integer_,
-        ExpectedConsecutivePairs = NA_integer_,
-        ExpectedNonConsecutivePairs = NA_integer_,
-        PValue = NA_real_,
-        Significant = NA,
-        row.names = NULL
-      ))
-    
-    level <- variable[2:length(variable)]
-    preceding_level <- variable[1:(length(variable) - 1)]
-    adjacent_complete <- !is.na(level) & !is.na(preceding_level)
-    total_adjacent_pairs <- sum(adjacent_complete)
-    if(total_adjacent_pairs == 0)
-      return(data.frame(
-        Variable = variable_name,
-        TotalAdjacentPairs = 0L,
-        ObservedConsecutivePairs = NA_integer_,
-        ObservedNonConsecutivePairs = NA_integer_,
-        ExpectedConsecutivePairs = NA_integer_,
-        ExpectedNonConsecutivePairs = NA_integer_,
-        PValue = NA_real_,
-        Significant = NA,
-        row.names = NULL
-      ))
-    
-    observed_consecutive_pairs <- sum(level[adjacent_complete] == preceding_level[adjacent_complete])
-    observed_non_consecutive_pairs <- total_adjacent_pairs - observed_consecutive_pairs
-    event_probability <- mean(variable == levels(variable)[2], na.rm = TRUE)
-    expected_consecutive_pairs <- round(total_adjacent_pairs * (event_probability^2 + (1 - event_probability)^2))
-    expected_non_consecutive_pairs <- total_adjacent_pairs - expected_consecutive_pairs
-    counts <- matrix(c(
-      observed_consecutive_pairs, observed_non_consecutive_pairs,
-      expected_consecutive_pairs, expected_non_consecutive_pairs
-    ), ncol = 2)
-    p_value <- stats::chisq.test(counts)$p.value
-    
+    original <- dataset_subset[[variable_name]]
+    variable <- factor(original[!is.na(original)])
+    exact <- nlevels(variable) == 2L && min(table(variable)) <= 10L
+    result <- .runs_test_binary(variable, exact = exact)
     data.frame(
       Variable = variable_name,
-      TotalAdjacentPairs = total_adjacent_pairs,
-      ObservedConsecutivePairs = observed_consecutive_pairs,
-      ObservedNonConsecutivePairs = observed_non_consecutive_pairs,
-      ExpectedConsecutivePairs = expected_consecutive_pairs,
-      ExpectedNonConsecutivePairs = expected_non_consecutive_pairs,
-      PValue = signif(p_value, 4),
-      Significant = p_value < alpha,
+      NonMissing = length(variable),
+      Missing = sum(is.na(original)),
+      Runs = result$runs,
+      ExpectedRuns = result$expected_runs,
+      PValue = result$p_value,
+      Significant = if(is.finite(result$p_value)) result$p_value < alpha else NA,
+      Method = if(!is.finite(result$p_value)) "Not testable" else if(exact)
+        "Exact Wald-Wolfowitz runs test" else
+        "Wald-Wolfowitz runs test (normal approximation, no continuity correction)",
+      Details = result$note,
       row.names = NULL
     )
   }))

@@ -2,8 +2,8 @@ Package: integrity
 Type: Package
 Title: Assessing the Integrity and Trustworthiness of Clinical Trials
         Data
-Version: 1.0.2
-Date: 2026-10-12
+Version: 1.0.3
+Date: 2026-10-20
 Authors@R: 
     c(
     person(given = "Sol", family = "Libesman", email = "sol.libesman@sydney.edu.au", role = c("aut", "cre")),
@@ -37,7 +37,7 @@ URL:
 Config/roxygen2/version: 8.0.0
 Config/testthat/edition: 3
 NeedsCompilation: no
-Packaged: 2026-10-19 03:40:59 UTC; slib7656
+Packaged: 2026-10-20 05:05:32 UTC; slib7656
 Author: Sol Libesman [aut, cre],
   David Nguyen [aut],
   Dario Strbenac [aut],
@@ -46,4 +46,4 @@ Author: Sol Libesman [aut, cre],
   Kylie Hunter [aut]
 Maintainer: Sol Libesman <sol.libesman@sydney.edu.au>
 Repository: CRAN
-Date/Publication: 2026-10-19 09:00:15 UTC
+Date/Publication: 2026-10-20 13:20:14 UTC
